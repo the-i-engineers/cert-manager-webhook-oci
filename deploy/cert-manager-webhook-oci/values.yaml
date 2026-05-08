@@ -36,7 +36,7 @@ ociResourcePrincipal:
 serviceAccountAnnotations: {}
 
 # Security context for the webhook container.
-# Defaults are set to comply with Kubernetes Pod Security Standards (restricted).
+# Defaults comply with Kubernetes Pod Security Standards (restricted).
 securityContext:
   runAsNonRoot: true
   runAsUser: 65532
@@ -45,6 +45,8 @@ securityContext:
   capabilities:
     drop:
       - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
 resources: {}
 
