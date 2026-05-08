@@ -7,8 +7,8 @@ name: Tag Release
 #   feat: or feat(scope):                            →  minor  (v1.2.3 → v1.3.0)
 #   anything else (fix:, chore:, ci:, …)             →  patch  (v1.2.3 → v1.2.4)
 #
-# The existing release.yml builds and pushes the Docker image when a v* tag
-# is pushed, producing immutable image tags (e.g. :v1.2.3, :1.2).
+# When a tag is created, release.yml fires and builds+pushes the Docker image
+# and Helm chart to GHCR with the semver tags.
 
 on:
   workflow_dispatch:
@@ -58,7 +58,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.version.outputs.is_tagged != 'true' && !inputs.dry_run
-        uses: ncipollo/release-action@cdcc88a9acf2d7ea82024e2f44e2f6d1eb37c0e0 # v1.15.0
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
         with:
           tag: ${{ steps.version.outputs.version_tag }}
           name: ${{ steps.version.outputs.version_tag }}
