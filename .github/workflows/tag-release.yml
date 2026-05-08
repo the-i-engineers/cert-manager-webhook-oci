@@ -1,14 +1,15 @@
 name: Tag Release
 
-# Creates an immutable semver tag on every push to main.
+# Creates an immutable semver tag on every push to main, then dispatches
+# release.yml at that tag ref to build and publish the Docker image + Helm chart.
+#
+# GitHub Actions does not re-trigger workflows from tags pushed via GITHUB_TOKEN,
+# so we use workflow_dispatch to bridge the gap.
 #
 # Bump rules (Conventional Commits):
-#   BREAKING CHANGE in footer, or type!: in subject  →  major  (v1.2.3 → v2.0.0)
-#   feat: or feat(scope):                            →  minor  (v1.2.3 → v1.3.0)
-#   anything else (fix:, chore:, ci:, …)             →  patch  (v1.2.3 → v1.2.4)
-#
-# When a tag is created, release.yml fires and builds+pushes the Docker image
-# and Helm chart to GHCR with the semver tags.
+#   BREAKING CHANGE in footer, or type!: in subject  ->  major  (v1.2.3 -> v2.0.0)
+#   feat: or feat(scope):                            ->  minor  (v1.2.3 -> v1.3.0)
+#   anything else (fix:, chore:, ci:, ...)           ->  patch  (v1.2.3 -> v1.2.4)
 
 on:
   workflow_dispatch:
@@ -30,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -65,6 +67,21 @@ jobs:
           generateReleaseNotes: true
           makeLatest: true
 
+      - name: Dispatch release build
+        if: steps.version.outputs.is_tagged != 'true' && !inputs.dry_run
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const tag = '${{ steps.version.outputs.version_tag }}';
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: tag,
+              inputs: { tag: tag },
+            });
+            core.notice(`Dispatched release.yml build for tag ${tag}`);
+
       - name: Job summary
         if: always()
         run: |
@@ -75,15 +92,15 @@ jobs:
           TYPE="${{ steps.version.outputs.version_type }}"
           {
             if [[ "$IS_TAGGED" == "true" ]]; then
-              echo "## 🏷️ Already tagged — $NEW"
+              echo "## Tagged -- $NEW"
               echo ""
               echo "> Commit is already tagged; no new tag was created."
             elif [[ "$DRY_RUN" == "true" ]]; then
-              echo "## 🏷️ Dry Run — would release $NEW"
+              echo "## Dry Run -- would release $NEW"
               echo ""
               echo "> No tags or GitHub Release were created."
             else
-              echo "## 🏷️ Release $NEW"
+              echo "## Release $NEW"
             fi
             echo ""
             echo "| Field | Value |"
