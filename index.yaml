@@ -2,6 +2,17 @@ apiVersion: v1
 entries:
   cert-manager-webhook-oci:
   - apiVersion: v1
+    appVersion: v0.1.8
+    created: "2026-05-08T19:32:10.415749384Z"
+    description: Allow cert-manager to solve DNS challenges using Oracle Cloud Infrastructure
+      DNS
+    digest: 695691bc84968dc2509267e203a34dea0bbb6afc6bda9862e87525c76dd80c8b
+    icon: https://www.oracle.com/asset/web/favicons/favicon-32.png
+    name: cert-manager-webhook-oci
+    urls:
+    - https://the-i-engineers.github.io/cert-manager-webhook-oci/cert-manager-webhook-oci-0.1.8.tgz
+    version: 0.1.8
+  - apiVersion: v1
     appVersion: v0.1.7
     created: "2026-05-08T19:03:51.745362666Z"
     description: Allow cert-manager to solve DNS challenges using Oracle Cloud Infrastructure
@@ -23,4 +34,4 @@ entries:
     urls:
     - https://the-i-engineers.github.io/cert-manager-webhook-oci/cert-manager-webhook-oci-0.1.6.tgz
     version: 0.1.6
-generated: "2026-05-08T19:03:51.744884976Z"
+generated: "2026-05-08T19:32:10.415285374Z"
