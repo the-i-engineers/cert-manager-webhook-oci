@@ -1,0 +1,95 @@
+name: Tag Release
+
+# Creates an immutable semver tag on every push to main.
+#
+# Bump rules (Conventional Commits):
+#   BREAKING CHANGE in footer, or type!: in subject  →  major  (v1.2.3 → v2.0.0)
+#   feat: or feat(scope):                            →  minor  (v1.2.3 → v1.3.0)
+#   anything else (fix:, chore:, ci:, …)             →  patch  (v1.2.3 → v1.2.4)
+#
+# The existing release.yml builds and pushes the Docker image when a v* tag
+# is pushed, producing immutable image tags (e.g. :v1.2.3, :1.2).
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Calculate next version without pushing tags or creating a release'
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Create semver tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Calculate next version
+        id: version
+        uses: paulhatch/semantic-version@9f72830310d5ed81233b641ee59253644cd8a8fc # v6.0.2
+        with:
+          tag_prefix: "v"
+          major_pattern: "/!:|BREAKING CHANGE:/"
+          minor_pattern: "/feat(\\(.+\\))?:/"
+          search_commit_body: true
+          version_format: "${major}.${minor}.${patch}"
+
+      - name: Push immutable tag
+        if: steps.version.outputs.is_tagged != 'true' && !inputs.dry_run
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          NEW="${{ steps.version.outputs.version_tag }}"
+          git tag "$NEW" "${{ github.sha }}"
+          git push origin "$NEW"
+          echo "Tagged ${{ github.sha }} as $NEW"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.is_tagged != 'true' && !inputs.dry_run
+        uses: ncipollo/release-action@cdcc88a9acf2d7ea82024e2f44e2f6d1eb37c0e0 # v1.15.0
+        with:
+          tag: ${{ steps.version.outputs.version_tag }}
+          name: ${{ steps.version.outputs.version_tag }}
+          generateReleaseNotes: true
+          makeLatest: true
+
+      - name: Job summary
+        if: always()
+        run: |
+          DRY_RUN="${{ inputs.dry_run || false }}"
+          IS_TAGGED="${{ steps.version.outputs.is_tagged }}"
+          NEW="${{ steps.version.outputs.version_tag }}"
+          PREV="${{ steps.version.outputs.previous_version }}"
+          TYPE="${{ steps.version.outputs.version_type }}"
+          {
+            if [[ "$IS_TAGGED" == "true" ]]; then
+              echo "## 🏷️ Already tagged — $NEW"
+              echo ""
+              echo "> Commit is already tagged; no new tag was created."
+            elif [[ "$DRY_RUN" == "true" ]]; then
+              echo "## 🏷️ Dry Run — would release $NEW"
+              echo ""
+              echo "> No tags or GitHub Release were created."
+            else
+              echo "## 🏷️ Release $NEW"
+            fi
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **New tag** | \`$NEW\` |"
+            echo "| **Previous** | \`$PREV\` |"
+            echo "| **Bump type** | \`$TYPE\` |"
+            echo "| **Dry run** | $DRY_RUN |"
+          } >> "$GITHUB_STEP_SUMMARY"
