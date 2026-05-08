@@ -22,6 +22,9 @@ jobs:
     name: Build and push Docker image + Helm chart
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: Resolve tag ref
         id: ref
@@ -78,7 +81,8 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Package and push Helm chart
+      - name: Package Helm chart
+        id: chart
         run: |
           set -euo pipefail
           TAG="${{ steps.ref.outputs.tag }}"
@@ -86,8 +90,29 @@ jobs:
           helm package deploy/cert-manager-webhook-oci \
             --version "$VERSION" \
             --app-version "$TAG"
-          helm push "cert-manager-webhook-oci-${VERSION}.tgz" \
-            oci://ghcr.io/the-i-engineers/charts
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tgz=cert-manager-webhook-oci-${VERSION}.tgz" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Helm repo index
+        run: |
+          set -euo pipefail
+          CHART_URL="https://the-i-engineers.github.io/cert-manager-webhook-oci"
+          mkdir -p gh-pages-dist
+          cp "${{ steps.chart.outputs.tgz }}" gh-pages-dist/
+          if curl -sf "${CHART_URL}/index.yaml" -o gh-pages-dist/old-index.yaml 2>/dev/null; then
+            helm repo index gh-pages-dist --url "${CHART_URL}" --merge gh-pages-dist/old-index.yaml
+            rm gh-pages-dist/old-index.yaml
+          else
+            helm repo index gh-pages-dist --url "${CHART_URL}"
+          fi
+
+      - name: Publish Helm chart to GitHub Pages
+        uses: peaceiris/actions-gh-pages@4f9cc29f342f2ee56c4df44547dd58879571faa7 # v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages-dist
+          publish_branch: gh-pages
+          keep_files: true
 
   build-main:
     name: Build and push Docker image (main)
