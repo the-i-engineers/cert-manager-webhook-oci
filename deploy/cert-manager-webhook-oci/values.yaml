@@ -1,0 +1,57 @@
+# The GroupName here is used to identify the company or business unit that created this webhook.
+# This name will need to be referenced in each Issuer's `webhook` stanza to
+# inform cert-manager of where to send ChallengePayload resources in order to
+# solve the DNS01 challenge.
+# This group name should be **unique**, hence using your own company's domain
+# here is recommended.
+groupName: acme.example.com
+
+certManager:
+  namespace: cert-manager
+  serviceAccountName: cert-manager
+
+image:
+  repository: ghcr.io/the-i-engineers/cert-manager-webhook-oci
+  tag: latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 443
+
+# List of Kubernetes Secret names containing OCI profile configuration.
+# When empty, OKE Workload Identity (resource principal) is used automatically.
+# See README for instructions on setting up OKE Workload Identity.
+ociProfileSecretNames: []
+
+ociResourcePrincipal:
+  version: "2.2"
+  region: ""
+
+# Annotations to add to the webhook ServiceAccount.
+# Use this to configure IRSA or similar provider-specific annotations.
+serviceAccountAnnotations: {}
+
+# Security context for the webhook container.
+# Defaults are set to comply with Kubernetes Pod Security Standards (restricted).
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+replicaCount: 1
