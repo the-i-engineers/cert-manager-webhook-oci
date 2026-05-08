@@ -6,6 +6,12 @@ on:
       - main
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.1.2) - leave empty to build main'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -13,12 +19,23 @@ permissions:
 
 jobs:
   build:
-    name: Build and push Docker image
+    name: Build and push Docker image + Helm chart
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
     steps:
+      - name: Resolve tag ref
+        id: ref
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ steps.ref.outputs.tag }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -39,8 +56,8 @@ jobs:
         with:
           images: ghcr.io/the-i-engineers/cert-manager-webhook-oci
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ steps.ref.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.tag }}
             type=sha,prefix=sha-,format=short
             type=raw,value=latest
 
@@ -53,7 +70,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            Version=${{ github.ref_name }}
+            Version=${{ steps.ref.outputs.tag }}
             GitCommit=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -64,10 +81,11 @@ jobs:
       - name: Package and push Helm chart
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${{ steps.ref.outputs.tag }}"
+          VERSION="${TAG#v}"
           helm package deploy/cert-manager-webhook-oci \
             --version "$VERSION" \
-            --app-version "$GITHUB_REF_NAME"
+            --app-version "$TAG"
           helm push "cert-manager-webhook-oci-${VERSION}.tgz" \
             oci://ghcr.io/the-i-engineers/charts
 
