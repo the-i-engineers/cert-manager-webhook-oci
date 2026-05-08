@@ -12,8 +12,8 @@ certManager:
 
 image:
   repository: ghcr.io/the-i-engineers/cert-manager-webhook-oci
-  tag: latest
-  pullPolicy: Always
+  tag: "0.1.7"
+  pullPolicy: IfNotPresent
 
 nameOverride: ""
 fullnameOverride: ""
