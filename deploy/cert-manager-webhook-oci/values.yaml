@@ -30,6 +30,10 @@ ociProfileSecretNames: []
 ociResourcePrincipal:
   version: "2.2"
   region: ""
+  # Audience for the projected ServiceAccount token required by OKE Workload Identity v2.2.
+  # Defaults to https://auth.{region}.oraclecloud.com when region is set.
+  # Override explicitly if your OKE cluster uses a non-standard audience.
+  tokenAudience: ""
 
 # Annotations to add to the webhook ServiceAccount.
 # Use this to configure IRSA or similar provider-specific annotations.
