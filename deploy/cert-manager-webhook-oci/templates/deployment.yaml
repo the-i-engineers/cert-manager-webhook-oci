@@ -20,6 +20,9 @@ spec:
         release: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ include "cert-manager-webhook-oci.fullname" . }}
+      # Disable auto-mount of the default service account token; we use a
+      # projected token with the OCI audience required by OKE Workload Identity.
+      automountServiceAccountToken: false
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -55,6 +58,9 @@ spec:
             - name: certs
               mountPath: /tls
               readOnly: true
+            - name: oci-service-account-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           {{- with .Values.securityContext }}
@@ -65,6 +71,24 @@ spec:
         - name: certs
           secret:
             secretName: {{ include "cert-manager-webhook-oci.servingCertificate" . }}
+        - name: oci-service-account-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: {{ include "cert-manager-webhook-oci.ociTokenAudience" . | quote }}
+                  expirationSeconds: 3600
+                  path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        apiVersion: v1
+                        fieldPath: metadata.namespace
     {{- with .Values.nodeSelector }}
       nodeSelector:
 {{ toYaml . | indent 8 }}

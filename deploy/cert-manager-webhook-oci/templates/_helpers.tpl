@@ -46,3 +46,17 @@ Create chart name and version as used by the chart label.
 {{- define "cert-manager-webhook-oci.servingCertificate" -}}
 {{ printf "%s-webhook-tls" (include "cert-manager-webhook-oci.fullname" .) }}
 {{- end -}}
+
+{{/*
+OCI token audience for the projected ServiceAccount token.
+Used by OKE Workload Identity v2.2 to authenticate against the OCI identity endpoint.
+*/}}
+{{- define "cert-manager-webhook-oci.ociTokenAudience" -}}
+{{- if .Values.ociResourcePrincipal.tokenAudience -}}
+{{- .Values.ociResourcePrincipal.tokenAudience -}}
+{{- else if .Values.ociResourcePrincipal.region -}}
+{{- printf "https://auth.%s.oraclecloud.com" .Values.ociResourcePrincipal.region -}}
+{{- else -}}
+oci
+{{- end -}}
+{{- end -}}
