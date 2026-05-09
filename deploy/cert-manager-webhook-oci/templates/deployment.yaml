@@ -75,9 +75,9 @@ spec:
           projected:
             sources:
               - serviceAccountToken:
-                  # Kubernetes API audience — used by the binary for in-cluster API access.
-                  # Must NOT use the OCI audience or the API server will reject it.
-                  audience: https://kubernetes.default.svc
+                  # No audience specified — Kubernetes automatically uses the API
+                  # server's configured audience, so this token is always accepted
+                  # for in-cluster API calls regardless of cluster configuration.
                   expirationSeconds: 3600
                   path: token
               - serviceAccountToken:
