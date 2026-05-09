@@ -75,9 +75,17 @@ spec:
           projected:
             sources:
               - serviceAccountToken:
-                  audience: {{ include "cert-manager-webhook-oci.ociTokenAudience" . | quote }}
+                  # Kubernetes API audience — used by the binary for in-cluster API access.
+                  # Must NOT use the OCI audience or the API server will reject it.
+                  audience: https://kubernetes.default.svc
                   expirationSeconds: 3600
                   path: token
+              - serviceAccountToken:
+                  # OCI authentication audience — used by OKE Workload Identity v2.2
+                  # for the RPST exchange at {kubernetes-service-host}:12250.
+                  audience: {{ include "cert-manager-webhook-oci.ociTokenAudience" . | quote }}
+                  expirationSeconds: 3600
+                  path: oci-token
               - configMap:
                   name: kube-root-ca.crt
                   items:
