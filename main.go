@@ -25,6 +25,11 @@ import (
 
 var GroupName = os.Getenv("GROUP_NAME")
 
+// POD_NAMESPACE is injected via downwardAPI. The webhook reads OCI credential
+// secrets from its own namespace rather than the challenge namespace so that a
+// single secret can serve all ClusterIssuers without scattering credentials.
+var PodNamespace = os.Getenv("POD_NAMESPACE")
+
 func main() {
 	if GroupName == "" {
 		panic("GROUP_NAME must be specified")
@@ -146,8 +151,16 @@ func (c *ociDNSProviderSolver) ociDNSClient(cfg *ociDNSProviderConfig, namespace
 	var configProvider common.ConfigurationProvider
 	secretName := cfg.OCIProfileSecretRef
 
-	klog.V(3).InfoS("Trying to load oci profile from secret", "secret", secretName, "namespace", namespace)
-	sec, err := c.client.CoreV1().Secrets(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	// Look up the secret in the webhook's own namespace (POD_NAMESPACE) so that
+	// a single secret serves all challenge namespaces. Fall back to the challenge
+	// namespace for backwards compatibility when POD_NAMESPACE is not set.
+	secretNamespace := PodNamespace
+	if secretNamespace == "" {
+		secretNamespace = namespace
+	}
+
+	klog.V(3).InfoS("Trying to load oci profile from secret", "secret", secretName, "namespace", secretNamespace)
+	sec, err := c.client.CoreV1().Secrets(secretNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
 	if err != nil {
 		klog.V(3).InfoS("Did not find a secret for oci configuration. Using Workload Identity auth.")
 		configProvider, err2 = auth.OkeWorkloadIdentityConfigurationProvider()
