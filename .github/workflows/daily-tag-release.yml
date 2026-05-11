@@ -17,6 +17,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: daily-tag-release
+  cancel-in-progress: false
+
 jobs:
   tag:
     name: Daily semver tag
