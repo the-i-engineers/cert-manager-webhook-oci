@@ -25,6 +25,11 @@ import (
 
 var GroupName = os.Getenv("GROUP_NAME")
 
+// POD_NAMESPACE is injected via downwardAPI. The webhook reads OCI credential
+// secrets from its own namespace rather than the challenge namespace so that a
+// single secret can serve all ClusterIssuers without scattering credentials.
+var PodNamespace = os.Getenv("POD_NAMESPACE")
+
 func main() {
 	if GroupName == "" {
 		panic("GROUP_NAME must be specified")
@@ -146,43 +151,58 @@ func (c *ociDNSProviderSolver) ociDNSClient(cfg *ociDNSProviderConfig, namespace
 	var configProvider common.ConfigurationProvider
 	secretName := cfg.OCIProfileSecretRef
 
-	klog.V(3).InfoS("Trying to load oci profile from secret", "secret", secretName, "namespace", namespace)
-	sec, err := c.client.CoreV1().Secrets(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	// Look up the secret in the webhook's own namespace first (POD_NAMESPACE),
+	// then fall back to the challenge namespace. This allows a single secret in
+	// the webhook's namespace to serve all ClusterIssuers without scattering
+	// credentials across namespaces, while remaining backwards compatible with
+	// deployments that keep the secret in the challenge namespace.
+	secretNamespace := PodNamespace
+	if secretNamespace == "" {
+		secretNamespace = namespace
+	}
+	sec, err := c.client.CoreV1().Secrets(secretNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	if err != nil && secretNamespace != namespace {
+		klog.V(3).InfoS("Secret not found in pod namespace, trying challenge namespace", "secret", secretName, "podNamespace", secretNamespace, "challengeNamespace", namespace)
+		secretNamespace = namespace
+		sec, err = c.client.CoreV1().Secrets(secretNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	}
+
+	klog.V(3).InfoS("Trying to load oci profile from secret", "secret", secretName, "namespace", secretNamespace)
 	if err != nil {
 		klog.V(3).InfoS("Did not find a secret for oci configuration. Using Workload Identity auth.")
 		configProvider, err2 = auth.OkeWorkloadIdentityConfigurationProvider()
 		if err2 != nil {
-			return nil, fmt.Errorf("unable to get secret `%s/%s` and Workload Identity auth also failed; %v; %v", secretName, namespace, err, err2)
+			return nil, fmt.Errorf("unable to get secret `%s/%s` and Workload Identity auth also failed; %v; %v", secretNamespace, secretName, err, err2)
 		}
 	} else {
 		tenancy, err := stringFromSecretData(&sec.Data, "tenancy")
 		if err != nil {
-			return nil, fmt.Errorf("unable to get tenancy from secret `%s/%s`; %v", secretName, namespace, err)
+			return nil, fmt.Errorf("unable to get tenancy from secret `%s/%s`; %v", secretNamespace, secretName, err)
 		}
 
 		user, err := stringFromSecretData(&sec.Data, "user")
 		if err != nil {
-			return nil, fmt.Errorf("unable to get user from secret `%s/%s`; %v", secretName, namespace, err)
+			return nil, fmt.Errorf("unable to get user from secret `%s/%s`; %v", secretNamespace, secretName, err)
 		}
 
 		region, err := stringFromSecretData(&sec.Data, "region")
 		if err != nil {
-			return nil, fmt.Errorf("unable to get region from secret `%s/%s`; %v", secretName, namespace, err)
+			return nil, fmt.Errorf("unable to get region from secret `%s/%s`; %v", secretNamespace, secretName, err)
 		}
 
 		fingerprint, err := stringFromSecretData(&sec.Data, "fingerprint")
 		if err != nil {
-			return nil, fmt.Errorf("unable to get fingerprint from secret `%s/%s`; %v", secretName, namespace, err)
+			return nil, fmt.Errorf("unable to get fingerprint from secret `%s/%s`; %v", secretNamespace, secretName, err)
 		}
 
 		privateKey, err := stringFromSecretData(&sec.Data, "privateKey")
 		if err != nil {
-			return nil, fmt.Errorf("unable to get privateKey from secret `%s/%s`; %v", secretName, namespace, err)
+			return nil, fmt.Errorf("unable to get privateKey from secret `%s/%s`; %v", secretNamespace, secretName, err)
 		}
 
 		privateKeyPassphrase, err := stringFromSecretData(&sec.Data, "privateKeyPassphrase")
 		if err != nil {
-			return nil, fmt.Errorf("unable to get privateKeyPassphrase from secret `%s/%s`; %v", secretName, namespace, err)
+			return nil, fmt.Errorf("unable to get privateKeyPassphrase from secret `%s/%s`; %v", secretNamespace, secretName, err)
 		}
 
 		configProvider = common.NewRawConfigurationProvider(tenancy, user, region, fingerprint, privateKey, &privateKeyPassphrase)
