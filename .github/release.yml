@@ -1,0 +1,25 @@
+# GitHub release notes configuration.
+# Controls how pull requests are grouped in automatically generated release notes
+# (used by the tag-release workflow that runs on pushes to main).
+# Grouping is based on the commit-type label applied by the lint-pr-title workflow.
+
+changelog:
+  categories:
+    - title: "⚠️ Breaking Changes"
+      labels: ["breaking-change"]
+    - title: "✨ Features"
+      labels: ["feat"]
+    - title: "🐛 Bug Fixes"
+      labels: ["fix"]
+    - title: "⚡ Performance"
+      labels: ["perf"]
+    - title: "♻️ Refactoring"
+      labels: ["refactor"]
+    - title: "👷 CI/CD"
+      labels: ["ci"]
+    - title: "📖 Documentation"
+      labels: ["docs"]
+    - title: "🔧 Maintenance"
+      labels: ["chore", "test", "style"]
+    - title: "📦 Other"
+      labels: ["*"]
