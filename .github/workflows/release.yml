@@ -1,10 +1,13 @@
 name: Release
 
-# Triggered by daily-tag-release.yml via workflow_dispatch after a new semver
-# tag is created. Also supports manual dispatch for ad-hoc builds.
+# Triggered by daily-tag-release.yml via a PAT-pushed tag (push: tags: v*).
+# Also supports manual dispatch for ad-hoc builds.
 # Builds and publishes the Docker image (ghcr.io) and Helm chart (gh-pages).
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -23,10 +26,19 @@ jobs:
       contents: write
       packages: write
     steps:
+      - name: Resolve tag
+        id: ref
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ steps.ref.outputs.tag }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
@@ -47,8 +59,8 @@ jobs:
         with:
           images: ghcr.io/the-i-engineers/cert-manager-webhook-oci
           tags: |
-            type=semver,pattern={{version}},value=${{ inputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
+            type=semver,pattern={{version}},value=${{ steps.ref.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.tag }}
             type=sha,prefix=sha-,format=short
             type=raw,value=latest
 
@@ -61,7 +73,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            Version=${{ inputs.tag }}
+            Version=${{ steps.ref.outputs.tag }}
             GitCommit=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -73,7 +85,7 @@ jobs:
         id: chart
         run: |
           set -euo pipefail
-          TAG="${{ inputs.tag }}"
+          TAG="${{ steps.ref.outputs.tag }}"
           VERSION="${TAG#v}"
           helm package deploy/cert-manager-webhook-oci \
             --version "$VERSION" \
@@ -101,10 +113,3 @@ jobs:
           publish_dir: ./gh-pages-dist
           publish_branch: gh-pages
           keep_files: true
-
-  build-main:
-    name: Build and push Docker image (main branch)
-    runs-on: ubuntu-latest
-    if: ${{ false }}  # disabled — daily-tag-release.yml handles versioned builds
-    steps:
-      - run: echo "disabled"
