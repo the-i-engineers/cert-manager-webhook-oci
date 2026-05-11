@@ -1,3 +1,4 @@
 {
-    "compartmentOCID": "$OCI_COMPARTMENT_OCID"
+    "compartmentOCID": "$OCI_COMPARTMENT_OCID",
+    "ociProfileSecretName": "oci-profile"
 }
