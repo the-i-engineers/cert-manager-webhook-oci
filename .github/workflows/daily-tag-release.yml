@@ -22,7 +22,7 @@ jobs:
     name: Daily semver tag
     permissions:
       contents: write
-    uses: the-i-engineers/infrastructure/.github/workflows/scheduled-tag-release.yml@v2.12.5
+    uses: the-i-engineers/infrastructure/.github/workflows/scheduled-tag-release.yml@v2.13.0
     with:
       cadence: daily
       dry_run: ${{ inputs.dry_run == true }}
