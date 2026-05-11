@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    registries: "*"
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "ci"
+    groups:
+      internal-workflows:
+        patterns:
+          - "the-i-engineers/*"
+      github-actions:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "the-i-engineers/*"
+
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+    groups:
+      go-deps:
+        patterns:
+          - "*"
