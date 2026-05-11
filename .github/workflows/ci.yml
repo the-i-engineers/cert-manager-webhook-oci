@@ -37,9 +37,6 @@ jobs:
       OCI_REGION: ${{ vars.OCI_REGION }}
       OCI_FINGERPRINT: ${{ vars.OCI_FINGERPRINT }}
       OCI_COMPARTMENT_OCID: ${{ vars.OCI_COMPARTMENT_OCID }}
-      TEST_ASSET_ETCD: _test/kubebuilder/bin/etcd
-      TEST_ASSET_KUBE_APISERVER: _test/kubebuilder/bin/kube-apiserver
-      TEST_ASSET_KUBECTL: _test/kubebuilder/bin/kubectl
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -82,8 +79,13 @@ jobs:
               f.write(yaml)
           EOF
 
-      - name: Download kubebuilder test tools
-        run: make _test/kubebuilder
+      - name: Download kubebuilder test tools (setup-envtest)
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          ASSETS=$(setup-envtest use 1.32.0 --bin-dir _test/kubebuilder/bin -p path)
+          echo "TEST_ASSET_ETCD=${ASSETS}/etcd"               >> "$GITHUB_ENV"
+          echo "TEST_ASSET_KUBE_APISERVER=${ASSETS}/kube-apiserver" >> "$GITHUB_ENV"
+          echo "TEST_ASSET_KUBECTL=${ASSETS}/kubectl"          >> "$GITHUB_ENV"
 
       - name: Run integration tests
         run: go test -timeout 60s -v .
