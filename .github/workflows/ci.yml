@@ -51,8 +51,9 @@ jobs:
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
         shell: bash
         run: |
-          # config.json — compartmentOCID for ClusterIssuer config
-          echo '{"compartmentOCID":"'"${OCI_COMPARTMENT_OCID}"'"}' > testdata/oci/config.json
+          # config.json — compartmentOCID + secret name for ClusterIssuer config
+          printf '{"compartmentOCID":"%s","ociProfileSecretName":"oci-profile"}\n' \
+            "${OCI_COMPARTMENT_OCID}" > testdata/oci/config.json
 
           # oci-profile.yaml — OCI API key secret; use Python to indent the PEM
           # correctly as a YAML block scalar (envsubst breaks multiline keys)
