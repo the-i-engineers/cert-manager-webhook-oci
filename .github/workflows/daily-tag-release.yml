@@ -1,0 +1,73 @@
+name: Daily Tag Release
+
+# Creates a semver tag daily from conventional commits, then dispatches
+# release.yml to build and publish the Docker image + Helm chart.
+#
+# Uses: the-i-engineers/infrastructure/.github/workflows/scheduled-tag-release.yml@vX.Y.Z
+# Bump rules: https://github.com/the-i-engineers/infrastructure/blob/main/docs/contributing/conventional-commits.md
+
+on:
+  schedule:
+    - cron: '30 3 * * *'  # 03:30 UTC (04:30 CET / 05:30 CEST)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Calculate next version without creating tags or releases'
+        type: boolean
+        default: false
+
+jobs:
+  tag:
+    name: Daily semver tag
+    permissions:
+      contents: write
+      actions: write
+    uses: the-i-engineers/infrastructure/.github/workflows/scheduled-tag-release.yml@v2.12.5
+    with:
+      cadence: daily
+      dry_run: ${{ inputs.dry_run == true }}
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+
+  dispatch-build:
+    name: Dispatch release build
+    needs: tag
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dry_run }}
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Find latest semver tag
+        id: latest
+        shell: bash
+        run: |
+          TAG=$(git tag -l 'v*' --sort=-version:refname | head -1)
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          # Check if this tag points to HEAD (i.e. was just created)
+          TAG_SHA=$(git rev-list -n 1 "${TAG}" 2>/dev/null || echo "")
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [[ "${TAG_SHA}" == "${HEAD_SHA}" ]]; then
+            echo "is_new=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_new=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch release.yml
+        if: steps.latest.outputs.is_new == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const tag = '${{ steps.latest.outputs.tag }}';
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: tag,
+              inputs: { tag: tag },
+            });
+            core.notice(`Dispatched release.yml build for tag ${tag}`);

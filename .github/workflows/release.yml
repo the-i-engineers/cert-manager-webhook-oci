@@ -1,53 +1,41 @@
 name: Release
 
+# Triggered by daily-tag-release.yml via workflow_dispatch after a new semver
+# tag is created. Also supports manual dispatch for ad-hoc builds.
+# Builds and publishes the Docker image (ghcr.io) and Helm chart (gh-pages).
+
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. v0.1.2) - leave empty to build main'
-        required: false
-        default: ''
+        description: 'Tag to build (e.g. v0.1.2)'
+        required: true
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
   build:
     name: Build and push Docker image + Helm chart
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
     permissions:
       contents: write
       packages: write
     steps:
-      - name: Resolve tag ref
-        id: ref
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ steps.ref.outputs.tag }}
+          ref: ${{ inputs.tag }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -55,17 +43,17 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: ghcr.io/the-i-engineers/cert-manager-webhook-oci
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.ref.outputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.tag }}
+            type=semver,pattern={{version}},value=${{ inputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
             type=sha,prefix=sha-,format=short
             type=raw,value=latest
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -73,19 +61,19 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            Version=${{ steps.ref.outputs.tag }}
+            Version=${{ inputs.tag }}
             GitCommit=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
 
       - name: Package Helm chart
         id: chart
         run: |
           set -euo pipefail
-          TAG="${{ steps.ref.outputs.tag }}"
+          TAG="${{ inputs.tag }}"
           VERSION="${TAG#v}"
           helm package deploy/cert-manager-webhook-oci \
             --version "$VERSION" \
@@ -115,45 +103,8 @@ jobs:
           keep_files: true
 
   build-main:
-    name: Build and push Docker image (main)
+    name: Build and push Docker image (main branch)
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: ${{ false }}  # disabled — daily-tag-release.yml handles versioned builds
     steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/the-i-engineers/cert-manager-webhook-oci
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=sha-,format=short
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            Version=main
-            GitCommit=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - run: echo "disabled"
