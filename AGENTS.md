@@ -4,7 +4,7 @@
 
 This repo is a [cert-manager](https://cert-manager.io) ACME DNS-01 webhook solver for [Oracle Cloud Infrastructure (OCI) DNS](https://www.oracle.com/cloud/networking/dns/). It implements the cert-manager `v1alpha1` solver interface so cert-manager can create and delete DNS TXT records in OCI DNS zones to satisfy ACME DNS-01 challenges.
 
-The repo is **public** and self-contained. All documentation (README, this file) must remain generic and free of internal infrastructure references.
+The repo is **private** to `the-i-engineers`. It is deployed on the TIE OKE platform cluster (`dev-platform-cluster`) and spoke cluster (`dev-tie-cluster`) via ArgoCD from `k8s-public-platform-system` and `k8s-public-spoke-system`.
 
 ## Repository Shape
 
