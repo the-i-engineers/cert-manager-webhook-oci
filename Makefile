@@ -26,12 +26,9 @@ test: _test/kubebuilder
 	go test -timeout 30s -v .
 
 _test/kubebuilder:
-	curl -fsSL https://go.kubebuilder.io/test-tools/$(KUBE_VERSION)/$(OS)/$(ARCH) -o kubebuilder-tools.tar.gz
-	mkdir -p _test/kubebuilder
-	tar -xvf kubebuilder-tools.tar.gz
-	mv kubebuilder/bin _test/kubebuilder/
-	rm kubebuilder-tools.tar.gz
-	rm -R kubebuilder
+	@which setup-envtest > /dev/null 2>&1 || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	@mkdir -p _test/kubebuilder/bin
+	@setup-envtest use 1.32.0 --bin-dir _test/kubebuilder/bin
 
 clean: clean-kubebuilder
 
