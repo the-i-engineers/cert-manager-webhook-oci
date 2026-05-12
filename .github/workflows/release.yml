@@ -61,7 +61,7 @@ jobs:
             type=semver,pattern={{version}},value=${{ steps.ref.outputs.tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.tag }}
             type=sha,prefix=sha-,format=short
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
