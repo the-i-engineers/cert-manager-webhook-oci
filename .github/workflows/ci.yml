@@ -29,9 +29,12 @@ jobs:
 
   test:
     name: Integration Test
-    # Only run on PRs from within the org — fork PRs do not receive secrets,
-    # so the integration test would always fail for external contributors.
-    if: github.event.pull_request.head.repo.fork == false
+    # Only run on non-fork, non-Dependabot PRs.
+    # Fork PRs and Dependabot-triggered pull_request workflows do not receive
+    # repository secrets, so the integration test would always fail for both.
+    if: >-
+      github.event.pull_request.head.repo.fork == false &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     env:
       TEST_ZONE_NAME: ${{ secrets.OCI_TEST_ZONE_NAME }}
