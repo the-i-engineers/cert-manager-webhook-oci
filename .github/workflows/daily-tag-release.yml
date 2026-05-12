@@ -4,7 +4,6 @@ name: Daily Tag Release
 # The GitHub Release fires the release: published trigger in release.yml,
 # which builds and publishes the Docker image + Helm chart.
 #
-# Uses: the-i-engineers/github-actions/.github/workflows/scheduled-tag-release.yml@vX.Y.Z
 # Bump rules: https://github.com/the-i-engineers/github-actions/blob/main/docs/contributing/conventional-commits.md
 
 on:
