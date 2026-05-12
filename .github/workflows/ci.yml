@@ -29,14 +29,20 @@ jobs:
 
   test:
     name: Integration Test
+    # Only run on non-fork, non-Dependabot PRs.
+    # Fork PRs and Dependabot-triggered pull_request workflows do not receive
+    # repository secrets, so the integration test would always fail for both.
+    if: >-
+      github.event.pull_request.head.repo.fork == false &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     env:
-      TEST_ZONE_NAME: tie-dev.ch.
-      OCI_TENANCY_OCID: ${{ vars.OCI_TENANCY_OCID }}
-      OCI_USER_OCID: ${{ vars.OCI_USER_OCID }}
-      OCI_REGION: ${{ vars.OCI_REGION }}
-      OCI_FINGERPRINT: ${{ vars.OCI_FINGERPRINT }}
-      OCI_COMPARTMENT_OCID: ${{ vars.OCI_COMPARTMENT_OCID }}
+      TEST_ZONE_NAME: ${{ secrets.OCI_TEST_ZONE_NAME }}
+      OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+      OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+      OCI_REGION: ${{ secrets.OCI_REGION }}
+      OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_COMPARTMENT_OCID: ${{ secrets.OCI_COMPARTMENT_OCID }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -103,7 +109,7 @@ jobs:
             echo "Build did not succeed: ${{ needs.build.result }}"
             exit 1
           fi
-          if [[ "${{ needs.test.result }}" != "success" ]]; then
+          if [[ "${{ needs.test.result }}" != "success" && "${{ needs.test.result }}" != "skipped" ]]; then
             echo "Integration test did not succeed: ${{ needs.test.result }}"
             exit 1
           fi
