@@ -1,12 +1,15 @@
 name: Release
 
-# Triggered by daily-tag-release.yml via a GitHub Release (release: published).
+# Triggered automatically when daily-tag-release.yml pushes a semver tag via GH_PAT.
+# The push: tags trigger fires only when the tag is pushed by a non-GITHUB_TOKEN identity
+# (PAT), bypassing GitHub's suppression of GITHUB_TOKEN-originated events.
 # Also supports manual dispatch for ad-hoc builds.
 # Builds and publishes the Docker image (ghcr.io) and Helm chart (gh-pages).
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -21,9 +24,6 @@ jobs:
   build:
     name: Build and push Docker image + Helm chart
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
     steps:
       - name: Resolve tag
         id: ref
@@ -61,7 +61,7 @@ jobs:
             type=semver,pattern={{version}},value=${{ steps.ref.outputs.tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.tag }}
             type=sha,prefix=sha-,format=short
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0

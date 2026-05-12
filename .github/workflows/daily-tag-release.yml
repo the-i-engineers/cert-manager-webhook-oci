@@ -1,7 +1,7 @@
 name: Daily Tag Release
 
-# Creates a semver tag and GitHub Release daily from conventional commits.
-# The GitHub Release fires the release: published trigger in release.yml,
+# Creates a semver tag daily from conventional commits.
+# The tag push fires the push: tags trigger in release.yml via GH_PAT,
 # which builds and publishes the Docker image + Helm chart.
 #
 # Bump rules: https://github.com/the-i-engineers/github-actions/blob/main/docs/contributing/conventional-commits.md
@@ -25,9 +25,10 @@ jobs:
     name: Daily semver tag
     permissions:
       contents: write
-    uses: the-i-engineers/github-actions/.github/workflows/scheduled-tag-release.yml@v1.0.0
+    uses: the-i-engineers/github-actions/.github/workflows/scheduled-tag-release.yml@v1.0.1
     with:
       cadence: daily
       dry_run: ${{ inputs.dry_run == true }}
     secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
