@@ -1,13 +1,12 @@
 name: Release
 
-# Triggered by daily-tag-release.yml via a PAT-pushed tag (push: tags: v*).
+# Triggered by daily-tag-release.yml via a GitHub Release (release: published).
 # Also supports manual dispatch for ad-hoc builds.
 # Builds and publishes the Docker image (ghcr.io) and Helm chart (gh-pages).
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
