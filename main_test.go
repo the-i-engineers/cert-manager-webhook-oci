@@ -14,7 +14,7 @@ var (
 )
 
 func TestRunsSuite(t *testing.T) {
-	fqdn = GetRandomString(20) + "." + zone
+	fqdn = getRandomString(20) + "." + zone
 
 	fixture := dns.NewFixture(&ociDNSProviderSolver{},
 		dns.SetResolvedZone(zone),
@@ -26,7 +26,7 @@ func TestRunsSuite(t *testing.T) {
 	fixture.RunConformance(t)
 }
 
-func GetRandomString(n int) string {
+func getRandomString(n int) string {
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 	b := make([]rune, n)

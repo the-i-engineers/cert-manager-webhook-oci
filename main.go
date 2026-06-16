@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"strings"
 	"time"
@@ -115,7 +114,7 @@ func patchRequest(ch *v1alpha1.ChallengeRequest, compartmentOCID string, operati
 				},
 			},
 		},
-		RequestMetadata: getRequestMetadataWithDefaultRetryPolicy(),
+		RequestMetadata: common.RequestMetadata{RetryPolicy: getDefaultRetryPolicy()},
 	}
 	if compartmentOCID != "" {
 		req.CompartmentId = &compartmentOCID
@@ -223,12 +222,6 @@ func stringFromSecretData(secretData *map[string][]byte, key string) (string, er
 	return string(bytes), nil
 }
 
-func getRequestMetadataWithDefaultRetryPolicy() common.RequestMetadata {
-	return common.RequestMetadata{
-		RetryPolicy: getDefaultRetryPolicy(),
-	}
-}
-
 func getDefaultRetryPolicy() *common.RetryPolicy {
 	attempts := uint(10)
 
@@ -246,7 +239,7 @@ func getDefaultRetryPolicy() *common.RetryPolicy {
 func getExponentialBackoffRetryPolicy(n uint, fn func(r common.OCIOperationResponse) bool) *common.RetryPolicy {
 	exponentialBackoff := func(r common.OCIOperationResponse) time.Duration {
 		response := r.Response.HTTPResponse()
-		duration := time.Duration(math.Pow(float64(2), float64(r.AttemptNumber-1))) * time.Second
+		duration := time.Duration(uint(1)<<(r.AttemptNumber-1)) * time.Second
 		klog.V(3).InfoS("backing off to retry", "duration", duration, "request method", response.Request.Method, "request", response.Request.URL.String(), "attempts", r.AttemptNumber)
 		return duration
 	}

@@ -25,7 +25,7 @@ COPY main.go main.go
 COPY main_test.go main_test.go
 
 RUN CGO_ENABLED=${CGO_ENABLED} GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-  go build -ldflags "-s -w -X github.com/the-i-engineers/cert-manager-webhook-oci/pkg/version.Release=${Version} -X github.com/the-i-engineers/cert-manager-webhook-oci/pkg/version.SHA=${GitCommit}" -o /usr/bin/cert-manager-webhook-oci .
+  go build -ldflags "-s -w" -o /usr/bin/cert-manager-webhook-oci .
 
 FROM --platform=${BUILDPLATFORM:-linux/amd64} gcr.io/distroless/base:nonroot
 
