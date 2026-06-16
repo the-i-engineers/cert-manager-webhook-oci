@@ -28,7 +28,7 @@ test: _test/kubebuilder
 _test/kubebuilder:
 	@which setup-envtest > /dev/null 2>&1 || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 	@mkdir -p _test/kubebuilder/bin
-	@setup-envtest use 1.32.0 --bin-dir _test/kubebuilder/bin
+	@setup-envtest use $(KUBE_VERSION) --bin-dir _test/kubebuilder/bin
 
 clean: clean-kubebuilder
 
