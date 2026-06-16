@@ -11,4 +11,4 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: the-i-engineers/github-actions/.github/actions/lint-pr-title@v1.0.0
+      - uses: the-i-engineers/github-actions/.github/actions/lint-pr-title@v1.3.1
