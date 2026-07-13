@@ -12,7 +12,7 @@ name: Scheduled Tag Release
 #                  covering commits since the previous weekly tag (falls back to 7 days if none exists).
 #                  Grouping is controlled by .github/release.yml in the calling repo.
 #
-# Bump rules: docs/contributing/conventional-commits.md
+# Bump rules: https://github.com/the-i-engineers/infrastructure/blob/main/docs/contributing/conventional-commits.md
 #
 # ─── Caller template (.github/workflows/tag-release.yml) ───────────────────
 #
@@ -96,7 +96,7 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT || github.token }}

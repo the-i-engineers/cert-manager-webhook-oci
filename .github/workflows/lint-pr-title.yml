@@ -10,5 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      issues: write
     steps:
       - uses: ./.github/actions/lint-pr-title
