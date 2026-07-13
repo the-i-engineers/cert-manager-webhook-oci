@@ -4,7 +4,7 @@ name: Daily Tag Release
 # The tag push fires the push: tags trigger in release.yml via GH_PAT,
 # which builds and publishes the Docker image + Helm chart.
 #
-# Bump rules: https://github.com/the-i-engineers/github-actions/blob/main/docs/contributing/conventional-commits.md
+# Bump rules: https://github.com/the-i-engineers/infrastructure/blob/main/docs/contributing/conventional-commits.md
 
 on:
   schedule:
@@ -25,7 +25,7 @@ jobs:
     name: Daily semver tag
     permissions:
       contents: write
-    uses: the-i-engineers/github-actions/.github/workflows/scheduled-tag-release.yml@v1.3.1
+    uses: ./.github/workflows/scheduled-tag-release.yml
     with:
       cadence: daily
       dry_run: ${{ inputs.dry_run == true }}

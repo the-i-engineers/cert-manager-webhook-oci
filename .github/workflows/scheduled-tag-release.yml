@@ -1,0 +1,418 @@
+# Intentional fork of the-i-engineers/reusable-workflows/.github/workflows/scheduled-tag-release.yml
+# Re-sync manually if the source changes (this repo is public and cannot reference a private repo).
+
+name: Scheduled Tag Release
+
+# Reusable workflow: creates semver tags and GitHub Releases on a schedule.
+#
+# daily  cadence → conventional-commit semver bump + GitHub-generated release notes
+#                  covering commits since the last semver tag.
+#                  Grouping is controlled by .github/release.yml in the calling repo.
+# weekly cadence → dated weekly-YYYY-WNN tag + GitHub-generated release notes
+#                  covering commits since the previous weekly tag (falls back to 7 days if none exists).
+#                  Grouping is controlled by .github/release.yml in the calling repo.
+#
+# Bump rules: docs/contributing/conventional-commits.md
+#
+# ─── Caller template (.github/workflows/tag-release.yml) ───────────────────
+#
+#   name: Tag Release
+#   on:
+#     schedule:
+#       - cron: '0 6 * * *'    # daily at 06:00 UTC
+#       - cron: '30 6 * * 1'   # weekly on Monday at 06:30 UTC (staggered 30 min after daily)
+#     workflow_dispatch:
+#       inputs:
+#         cadence:
+#           type: choice
+#           options: [daily, weekly]
+#           default: daily
+#         dry_run:
+#           type: boolean
+#           default: false
+#
+#   jobs:
+#     tag:
+#       permissions:
+#         contents: write
+#       uses: ./.github/workflows/scheduled-tag-release.yml
+#       with:
+#         cadence: ${{ github.event_name == 'workflow_dispatch' && inputs.cadence || (github.event.schedule == '30 6 * * 1' && 'weekly' || 'daily') }}
+#         dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true || false }}
+#       secrets:
+#         GH_PAT: ${{ secrets.GH_PAT }}
+#         TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+#
+# ───────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: false
+        type: string
+        default: ''
+        description: 'Deprecated — no longer used. The job runs on ubuntu-latest. Kept for backward compatibility with existing callers.'
+      cadence:
+        required: true
+        type: string
+        description: '"daily" or "weekly"'
+      tag_prefix:
+        required: false
+        type: string
+        default: 'v'
+        description: 'Prefix for semver tags (default: v)'
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+        description: 'Print what would happen without creating tags or releases'
+    secrets:
+      GH_PAT:
+        required: false
+        description: >
+          Optional Personal Access Token used to push tags and create GitHub Releases.
+          When provided, tags and releases are created under the PAT owner's identity,
+          which allows downstream workflows using `on: push: tags` to be triggered
+          (GITHUB_TOKEN-created events are suppressed by GitHub).
+          Requires 'contents: write' scope on the target repository.
+          Falls back to GITHUB_TOKEN if not provided (downstream triggers will not fire).
+      TEAMS_WEBHOOK_URL:
+        required: false
+        description: >
+          Optional Microsoft Teams Workflows incoming webhook URL.
+          When set, posts an Adaptive Card with the release notes to the Teams channel
+          after each daily or weekly release is created.
+          Use the same org-level TEAMS_WEBHOOK_URL secret as the approval notification.
+
+jobs:
+  tag:
+    name: ${{ inputs.cadence == 'weekly' && 'Weekly digest' || 'Daily semver tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.repository }}-scheduled-tag-${{ inputs.cadence }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Validate cadence and runner compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.cadence }}" in
+            daily|weekly) ;;
+            *)
+              echo "::error::Invalid cadence '${{ inputs.cadence }}'. Expected 'daily' or 'weekly'."
+              exit 1
+              ;;
+          esac
+
+          if [[ "${RUNNER_OS}" != "Linux" ]]; then
+            echo "::error::This workflow requires a Linux runner with bash and GNU date support."
+            exit 1
+          fi
+
+          if ! date -u -d '1 day ago' '+%Y-%m-%d' >/dev/null 2>&1; then
+            echo "::error::GNU date with -d support is required."
+            exit 1
+          fi
+
+          for cmd in curl jq; do
+            if ! command -v "${cmd}" >/dev/null 2>&1; then
+              echo "::error::Required tool '${cmd}' not found on this runner. Install it before using this workflow."
+              exit 1
+            fi
+          done
+
+      # ── DAILY: semver bump from conventional commits ──────────────────────
+
+      - name: Calculate next semver version
+        if: inputs.cadence == 'daily'
+        id: version
+        uses: paulhatch/semantic-version@9f72830310d5ed81233b641ee59253644cd8a8fc # v6.0.2
+        with:
+          tag_prefix: ${{ inputs.tag_prefix }}
+          major_pattern: "/!:|BREAKING CHANGE:/"
+          minor_pattern: "/feat(\\(.+\\))?:/"
+          search_commit_body: true
+          version_format: "${major}.${minor}.${patch}"
+
+      - name: Push semver tag
+        if: inputs.cadence == 'daily' && steps.version.outputs.is_tagged != 'true' && !inputs.dry_run
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.version_tag }}" "${{ github.sha }}"
+          git push origin "${{ steps.version.outputs.version_tag }}"
+
+      - name: Create daily GitHub Release
+        if: inputs.cadence == 'daily' && steps.version.outputs.is_tagged != 'true' && !inputs.dry_run
+        id: daily_release
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
+        with:
+          tag: ${{ steps.version.outputs.version_tag }}
+          name: ${{ steps.version.outputs.version_tag }}
+          generateReleaseNotes: true
+          makeLatest: true
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Prepare Teams payload — daily release
+        if: inputs.cadence == 'daily' && steps.version.outputs.is_tagged != 'true' && !inputs.dry_run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          S_TAG:     ${{ steps.version.outputs.version_tag }}
+          S_REPO:    ${{ github.repository }}
+          S_SHA:     ${{ github.sha }}
+          S_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO_NAME="${S_REPO##*/}"
+          SHA_SHORT="${S_SHA:0:7}"
+
+          RELEASE_JSON=$(curl -sS --fail \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${S_REPO}/releases/tags/${S_TAG}")
+          RELEASE_URL=$(jq -r '.html_url' <<< "${RELEASE_JSON}")
+          NOTES=$(jq -r '.body // ""' <<< "${RELEASE_JSON}" | tr -d '\r')
+
+          MAX=3000
+          TRUNCATED=false
+          if [[ ${#NOTES} -gt ${MAX} ]]; then
+            NOTES="${NOTES:0:${MAX}}"
+            TRUNCATED=true
+          fi
+
+          BODY_BLOCKS=$(jq -nc \
+            --arg notes       "${NOTES}" \
+            --argjson trunc   "${TRUNCATED}" \
+            --arg release_url "${RELEASE_URL}" \
+            '[
+              if $notes != "" then {"type":"TextBlock","text":$notes,"wrap":true,"fontType":"Monospace","size":"Small"} else empty end,
+              if $trunc then {"type":"TextBlock","text":("_Truncated — [view full release notes](" + $release_url + ")_"),"wrap":true,"isSubtle":true} else empty end
+            ]')
+
+          jq -nc \
+            --arg tag         "${S_TAG}" \
+            --arg repo        "${REPO_NAME}" \
+            --arg sha         "${SHA_SHORT}" \
+            --arg run_url     "${S_RUN_URL}" \
+            --arg release_url "${RELEASE_URL}" \
+            --argjson blocks  "${BODY_BLOCKS}" \
+            '{
+              "type": "message",
+              "attachments": [{
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                  "type": "AdaptiveCard",
+                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  "version": "1.2",
+                  "body": ([
+                    {"type":"TextBlock","text":("📦 Daily Release — " + $repo + " " + $tag),"weight":"Bolder","size":"Medium","wrap":true},
+                    {"type":"FactSet","facts":[{"title":"Repo","value":$repo},{"title":"Tag","value":$tag},{"title":"Commit","value":$sha}]}
+                  ] + $blocks),
+                  "actions": [
+                    {"type":"Action.OpenUrl","title":"View Release","url":$release_url},
+                    {"type":"Action.OpenUrl","title":"View Workflow Run","url":$run_url}
+                  ]
+                }
+              }]
+            }' > "${RUNNER_TEMP}/teams-payload.json"
+
+      # ── WEEKLY: dated digest anchored to last weekly tag ──────────────────
+
+      - name: Resolve weekly tag and commit range
+        if: inputs.cadence == 'weekly'
+        id: weekly
+        shell: bash
+        run: |
+          set -euo pipefail
+          WEEK_TAG="weekly-$(date -u '+%G-W%V')"
+          echo "tag=${WEEK_TAG}" >> "$GITHUB_OUTPUT"
+
+          if git rev-parse --verify "refs/tags/${WEEK_TAG}" &>/dev/null; then
+            echo "exists=true"      >> "$GITHUB_OUTPUT"
+            echo "has_commits=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+          # Anchor range to the previous weekly tag; fall back to last 7 days.
+          PREV=$(git tag -l 'weekly-*' --sort=-version:refname | head -1)
+          if [ -n "$PREV" ]; then
+            COMMITS=$(git log "${PREV}..HEAD" --no-merges --pretty=format:"%s")
+          else
+            COMMITS=$(git log --since="7 days ago" --no-merges --pretty=format:"%s" HEAD)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            echo "has_commits=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_commits=true"  >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push weekly tag
+        if: inputs.cadence == 'weekly' && steps.weekly.outputs.exists != 'true' && steps.weekly.outputs.has_commits == 'true' && !inputs.dry_run
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.weekly.outputs.tag }}" "${{ github.sha }}"
+          git push origin "${{ steps.weekly.outputs.tag }}"
+
+      - name: Create weekly GitHub Release
+        if: inputs.cadence == 'weekly' && steps.weekly.outputs.exists != 'true' && steps.weekly.outputs.has_commits == 'true' && !inputs.dry_run
+        id: weekly_release
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
+        with:
+          tag: ${{ steps.weekly.outputs.tag }}
+          name: "Weekly Summary — ${{ steps.weekly.outputs.tag }}"
+          generateReleaseNotes: true
+          makeLatest: false
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Prepare Teams payload — weekly release
+        if: inputs.cadence == 'weekly' && steps.weekly.outputs.exists != 'true' && steps.weekly.outputs.has_commits == 'true' && !inputs.dry_run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          S_TAG:     ${{ steps.weekly.outputs.tag }}
+          S_REPO:    ${{ github.repository }}
+          S_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO_NAME="${S_REPO##*/}"
+
+          RELEASE_JSON=$(curl -sS --fail \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${S_REPO}/releases/tags/${S_TAG}")
+          RELEASE_URL=$(jq -r '.html_url' <<< "${RELEASE_JSON}")
+          NOTES=$(jq -r '.body // ""' <<< "${RELEASE_JSON}" | tr -d '\r')
+
+          MAX=3000
+          TRUNCATED=false
+          if [[ ${#NOTES} -gt ${MAX} ]]; then
+            NOTES="${NOTES:0:${MAX}}"
+            TRUNCATED=true
+          fi
+
+          BODY_BLOCKS=$(jq -nc \
+            --arg notes       "${NOTES}" \
+            --argjson trunc   "${TRUNCATED}" \
+            --arg release_url "${RELEASE_URL}" \
+            '[
+              if $notes != "" then {"type":"TextBlock","text":$notes,"wrap":true,"fontType":"Monospace","size":"Small"} else empty end,
+              if $trunc then {"type":"TextBlock","text":("_Truncated — [view full release notes](" + $release_url + ")_"),"wrap":true,"isSubtle":true} else empty end
+            ]')
+
+          jq -nc \
+            --arg tag         "${S_TAG}" \
+            --arg repo        "${REPO_NAME}" \
+            --arg run_url     "${S_RUN_URL}" \
+            --arg release_url "${RELEASE_URL}" \
+            --argjson blocks  "${BODY_BLOCKS}" \
+            '{
+              "type": "message",
+              "attachments": [{
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                  "type": "AdaptiveCard",
+                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  "version": "1.2",
+                  "body": ([
+                    {"type":"TextBlock","text":("📅 Weekly Summary — " + $repo + " " + $tag),"weight":"Bolder","size":"Medium","wrap":true},
+                    {"type":"FactSet","facts":[{"title":"Repo","value":$repo},{"title":"Tag","value":$tag}]}
+                  ] + $blocks),
+                  "actions": [
+                    {"type":"Action.OpenUrl","title":"View Release","url":$release_url},
+                    {"type":"Action.OpenUrl","title":"View Workflow Run","url":$run_url}
+                  ]
+                }
+              }]
+            }' > "${RUNNER_TEMP}/teams-payload.json"
+
+      - name: Send Teams notification
+        if: "!inputs.dry_run"
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -z "${TEAMS_WEBHOOK_URL}" ]] && exit 0
+          [[ -f "${RUNNER_TEMP}/teams-payload.json" ]] || exit 0
+          curl -sS --fail-with-body \
+            -X POST "${TEAMS_WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            --data-binary "@${RUNNER_TEMP}/teams-payload.json"
+
+      # ── Summary ────────────────────────────────────────────────────────────
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            if [[ "${{ inputs.cadence }}" == "daily" ]]; then
+              IS_TAGGED="${{ steps.version.outputs.is_tagged }}"
+              NEW="${{ steps.version.outputs.version_tag }}"
+              PREV="${{ steps.version.outputs.previous_version }}"
+              TYPE="${{ steps.version.outputs.version_type }}"
+              DRY="${{ inputs.dry_run }}"
+              if [[ "$IS_TAGGED" == "true" ]]; then
+                echo "## 🏷️ Already tagged — ${NEW}"
+                echo ""
+                echo "> No new commits since last tag; nothing to do."
+              elif [[ "$DRY" == "true" ]]; then
+                echo "## 🏷️ Dry Run — would release ${NEW}"
+                echo ""
+                echo "> No tags or GitHub Release created."
+              else
+                echo "## 🏷️ Daily Release ${NEW}"
+              fi
+              echo ""
+              echo "| Field | Value |"
+              echo "|-------|-------|"
+              echo "| **New tag** | \`${NEW}\` |"
+              echo "| **Previous** | \`${PREV}\` |"
+              echo "| **Bump type** | \`${TYPE}\` |"
+              echo "| **Dry run** | ${DRY} |"
+            else
+              WTAG="${{ steps.weekly.outputs.tag }}"
+              EXISTS="${{ steps.weekly.outputs.exists }}"
+              HAS="${{ steps.weekly.outputs.has_commits }}"
+              DRY="${{ inputs.dry_run }}"
+              if [[ "$EXISTS" == "true" ]]; then
+                echo "## 📅 Already tagged — ${WTAG}"
+                echo ""
+                echo "> Weekly tag already exists for this ISO week; nothing to do."
+              elif [[ "$HAS" != "true" ]]; then
+                echo "## 📅 No new commits — skipped"
+                echo ""
+                echo "> No commits since last weekly tag."
+              elif [[ "$DRY" == "true" ]]; then
+                echo "## 📅 Dry Run — would create ${WTAG}"
+                echo ""
+                echo "> No tags or GitHub Release created."
+              else
+                echo "## 📅 Weekly Summary ${WTAG}"
+              fi
+              echo ""
+              echo "| Field | Value |"
+              echo "|-------|-------|"
+              echo "| **Tag** | \`${WTAG}\` |"
+              echo "| **Dry run** | ${DRY} |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
