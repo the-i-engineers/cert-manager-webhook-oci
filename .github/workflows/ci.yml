@@ -97,20 +97,11 @@ jobs:
       - name: Run integration tests
         run: go test -timeout 60s -v .
 
-  ci-required:
-    name: CI Required Check
+  status-check:
     needs: [build, test]
     if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check results
-        run: |
-          if [[ "${{ needs.build.result }}" != "success" ]]; then
-            echo "Build did not succeed: ${{ needs.build.result }}"
-            exit 1
-          fi
-          if [[ "${{ needs.test.result }}" != "success" && "${{ needs.test.result }}" != "skipped" ]]; then
-            echo "Integration test did not succeed: ${{ needs.test.result }}"
-            exit 1
-          fi
-          echo "All checks passed"
+    uses: the-i-engineers/reusable-workflows/.github/workflows/status-check.yml@5.5.0
+    with:
+      result: >-
+        ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+            && 'failure' || 'success' }}
