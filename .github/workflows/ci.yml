@@ -98,10 +98,21 @@ jobs:
         run: go test -timeout 60s -v .
 
   status-check:
+    name: Status Check
     needs: [build, test]
     if: always()
-    uses: the-i-engineers/reusable-workflows/.github/workflows/status-check.yml@5.5.0
-    with:
-      result: >-
-        ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
-            && 'failure' || 'success' }}
+    runs-on: ubuntu-latest
+    # Intentional fork of the-i-engineers/reusable-workflows/.github/workflows/status-check.yml
+    # Re-sync manually if the source changes (this repo is public and cannot reference a private repo).
+    steps:
+      - name: Gate
+        env:
+          RESULT: >-
+            ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+                && 'failure' || 'success' }}
+        run: |
+          if [[ "$RESULT" != "success" && "$RESULT" != "skipped" ]]; then
+            echo "Required checks did not pass: $RESULT"
+            exit 1
+          fi
+          echo "All required checks passed."
