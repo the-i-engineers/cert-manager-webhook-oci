@@ -24,6 +24,7 @@ deploy/
 .github/
   workflows/
     ci.yml                         # build + vet on every PR
+    _status-check.yml              # local fork of reusable-workflows' status-check.yml (called by ci.yml)
     lint-pr-title.yml              # Conventional Commits PR title check
     daily-tag-release.yml          # daily semver tag via PAT → fires release.yml
     release.yml                    # builds Docker image + Helm chart, publishes to GHCR + gh-pages
