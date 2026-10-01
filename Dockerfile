@@ -20,7 +20,6 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 RUN go mod download
 
-COPY pkg  pkg
 COPY main.go main.go
 COPY main_test.go main_test.go
 
