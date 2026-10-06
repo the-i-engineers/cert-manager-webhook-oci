@@ -1,0 +1,130 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.networkPolicy.kubeApi }}
+# Webhook serving + kube API client traffic.
+# Ingress is unrestricted on 6443 (cert-manager webhook calls may come
+# from any pod, e.g. depending on how cert-manager is deployed).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cert-manager-webhook-oci.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "cert-manager-webhook-oci.name" . }}
+    chart: {{ include "cert-manager-webhook-oci.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "cert-manager-webhook-oci.name" . }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+  egress:
+    # Kubernetes API server (any destination on 6443)
+    - ports:
+        - protocol: TCP
+          port: 6443
+---
+{{- end }}
+{{- if .Values.networkPolicy.dns.enabled }}
+# Cluster DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cert-manager-webhook-oci.fullname" . }}-dns
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "cert-manager-webhook-oci.name" . }}
+    chart: {{ include "cert-manager-webhook-oci.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "cert-manager-webhook-oci.name" . }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.dns.namespace }}
+          podSelector:
+            matchLabels:
+{{ toYaml .Values.networkPolicy.dns.podSelector | indent 14 }}
+      ports:
+{{- range .Values.networkPolicy.dns.ports }}
+        - protocol: {{ .protocol }}
+          port: {{ .port }}
+{{- end }}
+---
+{{- end }}
+{{- if .Values.networkPolicy.oci.enabled }}
+{{- if .Values.proxy.enabled }}
+{{- if not .Values.proxy.ip }}
+{{- fail "proxy.ip must be set when proxy.enabled is true" }}
+{{- end }}
+# Outbound proxy (all OCI API traffic).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cert-manager-webhook-oci.fullname" . }}-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "cert-manager-webhook-oci.name" . }}
+    chart: {{ include "cert-manager-webhook-oci.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "cert-manager-webhook-oci.name" . }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ printf "%s/32" .Values.proxy.ip }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.proxy.port }}
+{{- else }}
+# OCI API (HTTPS).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cert-manager-webhook-oci.fullname" . }}-oci
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "cert-manager-webhook-oci.name" . }}
+    chart: {{ include "cert-manager-webhook-oci.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "cert-manager-webhook-oci.name" . }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+      {{- if .Values.networkPolicy.oci.cidrs }}
+      {{- range .Values.networkPolicy.oci.cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+      {{- end }}
+      {{- else }}
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      {{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}
+{{- end }}
+{{- end }}
