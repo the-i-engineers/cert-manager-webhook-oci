@@ -44,6 +44,20 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+          {{- if .Values.proxy.enabled }}
+            - name: HTTP_PROXY
+              value: {{ printf "http://%s:%v" .Values.proxy.ip .Values.proxy.port | quote }}
+            - name: HTTPS_PROXY
+              value: {{ printf "http://%s:%v" .Values.proxy.ip .Values.proxy.port | quote }}
+            - name: http_proxy
+              value: {{ printf "http://%s:%v" .Values.proxy.ip .Values.proxy.port | quote }}
+            - name: https_proxy
+              value: {{ printf "http://%s:%v" .Values.proxy.ip .Values.proxy.port | quote }}
+            - name: NO_PROXY
+              value: {{ .Values.proxy.noProxy | quote }}
+            - name: no_proxy
+              value: {{ .Values.proxy.noProxy | quote }}
+          {{- end }}
           ports:
             - name: https
               containerPort: 6443

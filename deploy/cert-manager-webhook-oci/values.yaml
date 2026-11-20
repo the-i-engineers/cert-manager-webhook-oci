@@ -41,6 +41,8 @@ serviceAccountAnnotations: {}
 
 # Security context for the webhook container.
 # Defaults comply with Kubernetes Pod Security Standards (restricted).
+# On OpenShift, set runAsUser: null — the restricted SCC assigns the UID
+# from the project's range and a hardcoded UID will be rejected.
 securityContext:
   runAsNonRoot: true
   runAsUser: 65532
@@ -61,3 +63,47 @@ tolerations: []
 affinity: {}
 
 replicaCount: 1
+
+# Outbound HTTP(S) proxy for OCI API calls. When enabled, HTTP_PROXY,
+# HTTPS_PROXY and NO_PROXY are injected into the webhook container; the
+# OCI Go SDK and the Kubernetes client pick them up automatically.
+# In-cluster traffic (kube API server, OKE Workload Identity RPST exchange)
+# is excluded via NO_PROXY.
+proxy:
+  enabled: false
+  ip: ""
+  port: 8080
+  # Comma-separated list of hosts/CIDRs/domains that must NOT go through
+  # the proxy. Defaults exclude in-cluster traffic (kube API server, OKE
+  # Workload Identity RPST exchange).
+  noProxy: "localhost,127.0.0.1,::1,.svc,.cluster.local"
+
+# Restrict the webhook pod's traffic with a NetworkPolicy.
+# Egress is limited to the Kubernetes API server, cluster DNS and either
+# the proxy (when proxy.enabled) or OCI over TCP/443.
+# Each policy can be toggled individually; the master switch is `enabled`.
+networkPolicy:
+  enabled: false
+  # Ingress (6443) + egress to the Kubernetes API server (6443).
+  kubeApi: true
+  # Egress to OCI (via proxy when proxy.enabled, otherwise TCP/443).
+  oci:
+    enabled: true
+    # Optional CIDRs to restrict OCI API egress to, e.g. the public IP
+    # ranges Oracle publishes for iaas-<region>.oraclecloud.com.
+    # When empty, any destination on TCP/443 is allowed.
+    cidrs: []
+  # Cluster DNS egress rule.
+  # On OpenShift use namespace: openshift-dns, podSelector:
+  # {dns.operator.openshift.io/daemonset-dns: default} and, for the node
+  # resolver, port 5353 instead of 53.
+  dns:
+    enabled: true
+    namespace: kube-system
+    podSelector:
+      k8s-app: kube-dns
+    ports:
+      - port: 53
+        protocol: UDP
+      - port: 53
+        protocol: TCP
